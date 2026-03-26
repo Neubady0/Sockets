@@ -1,0 +1,95 @@
+================================================================================
+GUÍA PARA LA DOCUMENTACIÓN (WORD/PDF) Y EL GUIÓN DEL VÍDEO (PRÁCTICA DE SOCKETS)
+================================================================================
+
+Esta guía te dice exactamente qué capturar de tu código, qué texto explicativo 
+poner debajo de la captura para el documento, y te servirá como guion exacto 
+para tu video de 4 minutos (1m Red, 1m TCP/UDP, 2m Chat y Demo).
+
+También incluye cómo documentar el resto de la práctica (Tickets, Apache/Nginx).
+
+--------------------------------------------------------------------------------
+PARTE 1: TEORÍA Y CHAT (PARA EL VÍDEO Y LA DOCUMENTACIÓN)
+--------------------------------------------------------------------------------
+
+[ 1. Teoría de Red (1 minuto en el vídeo / 1 párrafo en el Doc) ]
+- QUÉ HACER: No necesitas código aquí. 
+- QUÉ PONER / DECIR: "Una red es un conjunto interconectado de dispositivos. Para comunicarnos usamos Sockets. Un Socket es la combinación de una Dirección IP (dónde está el equipo), un Puerto (qué puerta usamos para la app) y un Protocolo (TCP o UDP)."
+
+[ 2. TCP vs UDP (1 minuto en el vídeo / 1 tabla o explicación en el Doc) ]
+- QUÉ HACER: Muestra una comparativa conceptual (puedes usar la tabla del Word de teoría).
+- QUÉ PONER / DECIR: "TCP está orientado a conexión (hace un handshake o saludo previo), garantiza que el paquete llegue, en orden y sin duplicados, pero es más lento (ideal para nuestro Chat o servidor HTTP). UDP envía paquetes sin importarle si llegan o su orden, pero es mucho más rápido (ideal para videojuegos o streaming)."
+
+[ 3. Chat Básico - Código y Demo (2 minutos en el vídeo / Capturas en el Doc) ]
+
+** Captura 1: El Servidor de Chat **
+- ARCHIVO: src/chat/ChatServer.java
+- DÓNDE HACER CAPTURA: Captura el método `run()` interno de la clase `ClientHandler`. Específicamente el bloque del `while ((mensaje = in.readLine()) != null)`.
+- TEXTO DEBAJO: "Servidor concurrente: Al recibir un cliente mediante `accept()`, delegamos la conexión a un nuevo Hilo (`Thread`). Dentro del hilo leemos los múltiples mensajes usando `in.readLine()` y devolvemos el eco. Si leemos la palabra 'salir', se rompe el bucle."
+
+** Captura 2: El Cliente de Chat y Cierre Ordenado **
+- ARCHIVO: src/chat/ChatClient.java
+- DÓNDE HACER CAPTURA: Captura el bloque donde arranca el `Thread readerThread = new Thread(...)` y el `while(true)` de lectura de consola.
+- TEXTO DEBAJO: "En el cliente existen dos procesos simultáneos (Hilos). El hilo principal lee de la consola y envía al servidor. El segundo hilo escucha asíncronamente las respuestas del servidor. El 'cierre ordenado' se produce al enviar 'salir': el servidor responde '¡Hasta luego!', cerramos los streams, y ambos sockets (cliente y servidor) se cierran ordenadamente usando el bloque try-with-resources y el finally."
+
+- VIDEO DEMO: Abre dos terminales. En una ejecuta el ChatServer y en otra el ChatClient. Envía dos mensajes normales ("hola", "prueba") y luego "salir". Muestra cómo el servidor no crashea y simplemente reporta la desconexión.
+
+
+--------------------------------------------------------------------------------
+PARTE 2: SERVIDOR DE TICKETS (SOLO PARA DOCUMENTACIÓN)
+--------------------------------------------------------------------------------
+
+Aquí debes demostrar cómo evoluciona la concurrencia. Toma estas capturas:
+
+** Captura 3: Servidor Secuencial y Telnet **
+- ARCHIVO: src/tickets/v1/TicketServerSecuencial.java
+- DÓNDE HACER CAPTURA: Al bucle `while(true)` donde está el `serverSocket.accept()` y el `in.readLine()`.
+- TEXTO DEBAJO: "Si usamos Telnet para conectar al servidor v1 y no escribimos nada, `in.readLine()` bloquea el único hilo de ejecución. Cualquier otra persona que intente conectarse se quedará esperando, demostrando por qué un servidor iterativo puro no es viable comercialmente."
+
+** Captura 4: Concurrencia Pura vs Pool de Threads (v2 y v3) **
+- ARCHIVO: src/tickets/v3/TicketServerPool.java
+- DÓNDE ACER CAPTURA: Captura a la línea `ExecutorService pool = Executors.newFixedThreadPool(10);` y al `pool.execute(...)`.
+- TEXTO DEBAJO: "Al crear un hilo por cliente (v2) podemos agotar la memoria si hay picos de usuarios. Utilizando un `ExecutorService` de tamaño fijo (v3) limitamos a 10 hilos activos concurrentes, protegiendo al servidor (backpressure)."
+
+** Captura 5: Resolviendo Condición de Carrera (Sync vs Atomic) **
+- ARCHIVO: src/tickets/v4/TicketServerSync.java y src/tickets/v5/TicketServerAtomic.java
+- DÓNDE HACER CAPTURA: Poner ambas capturas juntas. De la v4 captura el método `private static synchronized int getNextTicket()`. De la v5 captura la declaración `private static final AtomicInteger ticketCounter`.
+- TEXTO DEBAJO: "Problema: Al atender múltiples peticiones a la vez, el contador básico (`ticketCounter++`) se pisa entre clientes y devuelve tickets duplicados. Solución 1 (v4): Bloqueamos la función entera con `synchronized` para exclusión mutua. Solución 2 (v5): Utilizamos `AtomicInteger` y su método `getAndIncrement()`, el cual garantiza operaciones sin colisión a nivel de hardware (Lock-Free), siendo mucho más óptimo."
+
+
+--------------------------------------------------------------------------------
+PARTE 3: APACHE VS NGINX (SOLO PARA DOCUMENTACIÓN)
+--------------------------------------------------------------------------------
+
+** Captura 6: El modelo prefork/hilos de Apache **
+- ARCHIVO: src/simulador/ApacheServer.java
+- DÓNDE HACER CAPTURA: Captura el método `handleConnection` completo destacando `String request = in.readLine();`.
+- TEXTO DEBAJO: "Apache tradicional asigna un hilo/proceso pesado y bloqueante por conexión TCP. Si conecto 500 clientes 'lentos' que no envían datos, tendré 500 hilos bloqueados esperando en `readLine()`, derrochando Memoria RAM inútilmente."
+
+** Captura 7: Modelo Eventos de Nginx (NIO) **
+- ARCHIVO: src/simulador/NginxServer.java
+- DÓNDE HACER CAPTURA: Al bloque del `selector.select()` y los `if (key.isAcceptable())` / `key.isReadable()`.
+- TEXTO DEBAJO: "Nginx no crea un Hilo por conexión. Utiliza canales asíncronos (`SocketChannel.configureBlocking(false)`) y un Selector (multiplexor). Existe un único hilo gigante que duerme en el `select()` y el Sistema Operativo le despierta enviándole 'Eventos' únicamente cuando alguien tiene datos listos. No perdemos hilos en conexiones muertas/lentas."
+
+
+--------------------------------------------------------------------------------
+PARTE 4: MINI SERVIDOR WEB 'MINI-APACHE' (DOCUMENTACIÓN)
+--------------------------------------------------------------------------------
+
+** Captura 8: Parseo del HTTP **
+- ARCHIVO: src/webserver/HttpHandler.java
+- DÓNDE HACER CAPTURA: Desde el `String requestLine = reader.readLine();` hasta la comprobación del `if (parts[0].equals("GET"))`.
+- TEXTO DEBAJO: "El protocolo HTTP viaja en un stream de Sockets normal. Para procesarlo, leemos la primera línea (ej: GET /index.html HTTP/1.1), separamos por espacios y extraemos la ruta de lo que el navegador nos exige."
+
+** Captura 9: Headers y Respuesta **
+- ARCHIVO: src/webserver/HttpHandler.java
+- DÓNDE HACER CAPTURA: Método `sendResponseHeaders(...)`.
+- TEXTO DEBAJO: "Para que el navegador nos entienda, usamos nuestro `OutputStream` e imprimimos cabeceras exactas (Headers): Código 200 OK, la longitud de bytes reales del archivo, y el `Content-Type` dependiendo de la extensión (.html, .jpg, .css)."
+
+--------------------------------------------------------------------------------
+RESUMEN PARA TU ENTREGA FINAL:
+--------------------------------------------------------------------------------
+1. Graba tu video de 4 minutos siguiendo la estructura de la PARTE 1. Utiliza el código que tienes y haz la pequeña demostración abriendo terminales (`java ChatServer` y `java ChatClient`).
+2. Sube los archivos Java (`.java`) a tu repositorio de GitHub. 
+3. Pega las capturas exactas sugeridas en un documento Word/PDF junto al texto explicativo que está debajo de cada una.
+================================================================================
